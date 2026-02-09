@@ -1,0 +1,59 @@
+sensor:
+  process_monitor:
+    poll_interval: 1.0
+    hash_executables: true
+  file_monitor:
+    watched_dirs:
+      - /tmp
+      - /var/tmp
+      - ~/Downloads
+      - ~/Desktop
+      - /etc
+      - ~/Library/LaunchAgents
+      - ~/Library/LaunchDaemons
+  network_monitor:
+    poll_interval: 2.0
+
+features:
+  window_size: 30
+  normalization: standard
+
+ml:
+  isolation_forest:
+    n_estimators: 200
+    contamination: 0.05
+    retrain_interval: 1000
+  autoencoder:
+    hidden_dims: [64, 32, 16, 8]
+    learning_rate: 0.001
+    batch_size: 64
+    retrain_interval: 500
+    buffer_size: 10000
+  ensemble:
+    weights:
+      isolation_forest: 0.4
+      autoencoder: 0.4
+      behavioral: 0.2
+  thresholds:
+    normal: 30
+    suspicious: 60
+    malicious: 80
+    critical: 90
+
+detection:
+  alert_dedup_window: 60
+  escalation_threshold: 3
+
+response:
+  auto_respond_threshold: 80
+  quarantine_dir: data/quarantine
+
+storage:
+  database_path: data/edr.db
+  event_retention_hours: 24
+  cleanup_interval: 3600
+
+dashboard:
+  host: "0.0.0.0"
+  port: 8080
+  debug: false

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDR Console - Endpoint Detection & Response</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.8.5/dist/d3.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1><span class="logo-icon">&#9632;</span> EDR Console</h1>
+            <span class="subtitle">Endpoint Detection & Response</span>
+        </div>
+        <div class="header-right">
+            <div class="endpoint-health">
+                <span class="health-label">ENDPOINT HEALTH</span>
+                <div class="health-gauge">
+                    <canvas id="healthGauge" width="80" height="80"></canvas>
+                    <span id="healthScore" class="health-score">100</span>
+                </div>
+            </div>
+            <div class="status-indicators">
+                <span class="status-dot green" id="sensorStatus"></span>
+                <span class="status-text">Sensors Active</span>
+                <span class="status-dot" id="mlStatus"></span>
+                <span class="status-text">ML Engine</span>
+            </div>
+            <div class="uptime" id="uptime">Uptime: --:--:--</div>
+        </div>
+    </header>
+
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="alerts">Alerts</button>
+        <button class="tab-btn" data-tab="processes">Processes</button>
+        <button class="tab-btn" data-tab="ml">ML Metrics</button>
+        <button class="tab-btn" data-tab="mitre">MITRE ATT&CK</button>
+        <button class="tab-btn" data-tab="response">Response Log</button>
+    </nav>
+
+    <main>
+        <!-- Alert Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-card critical">
+                <span class="stat-value" id="statCritical">0</span>
+                <span class="stat-label">CRITICAL</span>
+            </div>
+            <div class="stat-card high">
+                <span class="stat-value" id="statHigh">0</span>
+                <span class="stat-label">HIGH</span>
+            </div>
+            <div class="stat-card medium">
+                <span class="stat-value" id="statMedium">0</span>
+                <span class="stat-label">MEDIUM</span>
+            </div>
+            <div class="stat-card low">
+                <span class="stat-value" id="statLow">0</span>
+                <span class="stat-label">LOW</span>
+            </div>
+            <div class="stat-card info-stat">
+                <span class="stat-value" id="statTotal">0</span>
+                <span class="stat-label">TOTAL</span>
+            </div>
+        </div>
+
+        <!-- Alerts Tab -->
+        <div class="tab-content active" id="tab-alerts">
+            <div class="panel-row">
+                <div class="panel wide">
+                    <div class="panel-header">
+                        <h2>Alert Timeline</h2>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="alertTimeline"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Real-Time Alerts</h2>
+                    <div class="filter-group">
+                        <select id="alertSeverityFilter">
+                            <option value="">All Severities</option>
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                        <select id="alertStatusFilter">
+                            <option value="">All Status</option>
+                            <option value="open">Open</option>
+                            <option value="acknowledged">Acknowledged</option>
+                            <option value="resolved">Resolved</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="alert-list" id="alertList">
+                    <div class="empty-state">Monitoring... No alerts yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processes Tab -->
+        <div class="tab-content" id="tab-processes">
+            <div class="panel-row">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Active Processes</h2>
+                    </div>
+                    <div class="table-container">
+                        <table id="processTable">
+                            <thead>
+                                <tr>
+                                    <th>PID</th>
+                                    <th>PPID</th>
+                                    <th>Name</th>
+                                    <th>User</th>
+                                    <th>Threat Score</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="processTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-row">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Process Tree</h2>
+                    </div>
+                    <div id="processTree" class="tree-container">
+                        <div class="empty-state">Click a process to view its tree.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ML Metrics Tab -->
+        <div class="tab-content" id="tab-ml">
+            <div class="panel-row">
+                <div class="panel half">
+                    <div class="panel-header">
+                        <h2>Model Status</h2>
+                    </div>
+                    <div class="metrics-grid" id="mlModelStatus">
+                        <div class="metric-item">
+                            <span class="metric-label">Isolation Forest</span>
+                            <span class="metric-value" id="ifStatus">Not Trained</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Autoencoder</span>
+                            <span class="metric-value" id="aeStatus">Not Trained</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Samples Scored</span>
+                            <span class="metric-value" id="samplesScored">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Avg Threat Score</span>
+                            <span class="metric-value" id="avgThreatScore">0.0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel half">
+                    <div class="panel-header">
+                        <h2>Severity Distribution</h2>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="severityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-row">
+                <div class="panel half">
+                    <div class="panel-header">
+                        <h2>Ensemble Weights</h2>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="weightsChart"></canvas>
+                    </div>
+                </div>
+                <div class="panel half">
+                    <div class="panel-header">
+                        <h2>Threat Intel</h2>
+                    </div>
+                    <div class="metrics-grid" id="tiStats">
+                        <div class="metric-item">
+                            <span class="metric-label">Hash IOCs</span>
+                            <span class="metric-value" id="tiHashes">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">IP IOCs</span>
+                            <span class="metric-value" id="tiIPs">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Domain IOCs</span>
+                            <span class="metric-value" id="tiDomains">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Total IOCs</span>
+                            <span class="metric-value" id="tiTotal">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MITRE ATT&CK Tab -->
+        <div class="tab-content" id="tab-mitre">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>MITRE ATT&CK Coverage</h2>
+                </div>
+                <div id="mitreMatrix" class="mitre-matrix">
+                </div>
+            </div>
+        </div>
+
+        <!-- Response Log Tab -->
+        <div class="tab-content" id="tab-response">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Response Actions</h2>
+                </div>
+                <div id="responseLog" class="response-log">
+                    <div class="empty-state">No response actions taken yet.</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
