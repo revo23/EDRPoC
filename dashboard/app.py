@@ -1,5 +1,7 @@
+import functools
 import json
 import logging
+import os
 import time
 
 from flask import Flask, render_template, jsonify, request
@@ -21,11 +23,37 @@ class Dashboard:
         self.process_monitor = process_monitor
 
         self.app = Flask(__name__)
-        self.app.config["SECRET_KEY"] = "edr-poc-secret"
-        self.socketio = SocketIO(self.app, async_mode="eventlet", cors_allowed_origins="*")
+        self.app.config["SECRET_KEY"] = os.urandom(32).hex()
+
+        host = self.config.get("host", "127.0.0.1")
+        port = self.config.get("port", 8080)
+        allowed_origins = self.config.get("cors_origins", [
+            f"http://localhost:{port}",
+            f"http://127.0.0.1:{port}",
+        ])
+        self.socketio = SocketIO(self.app, async_mode="eventlet",
+                                 cors_allowed_origins=allowed_origins)
+
+        # Generate API token for authenticating destructive actions
+        self._api_token = self.config.get("api_token") or os.urandom(16).hex()
+        logger.info("Dashboard API token: %s", self._api_token)
 
         self._register_routes()
         self._start_time = time.time()
+
+    def _require_auth(self, f):
+        """Decorator requiring Bearer token for destructive API endpoints."""
+        @functools.wraps(f)
+        def decorated(*args, **kwargs):
+            auth = request.headers.get("Authorization", "")
+            if auth.startswith("Bearer "):
+                token = auth[7:]
+            else:
+                token = request.headers.get("X-API-Token", "")
+            if not token or token != self._api_token:
+                return jsonify({"error": "Unauthorized — provide valid API token"}), 401
+            return f(*args, **kwargs)
+        return decorated
 
     def _register_routes(self):
         app = self.app
@@ -89,11 +117,13 @@ class Dashboard:
             return jsonify({"matrix": matrix, "coverage": coverage_map})
 
         @app.route("/api/response/kill/<int:pid>", methods=["POST"])
+        @self._require_auth
         def api_kill_process(pid):
             result = self.response_engine.kill_process(pid, reason="Dashboard manual kill")
             return jsonify(result)
 
         @app.route("/api/response/quarantine", methods=["POST"])
+        @self._require_auth
         def api_quarantine():
             data = request.get_json() or {}
             path = data.get("path", "")
@@ -107,11 +137,13 @@ class Dashboard:
             return jsonify(self.response_engine.get_action_log())
 
         @app.route("/api/alerts/<int:alert_id>/acknowledge", methods=["POST"])
+        @self._require_auth
         def api_acknowledge_alert(alert_id):
             self.alert_manager.acknowledge_alert(alert_id)
             return jsonify({"status": "acknowledged"})
 
         @app.route("/api/alerts/<int:alert_id>/resolve", methods=["POST"])
+        @self._require_auth
         def api_resolve_alert(alert_id):
             self.alert_manager.resolve_alert(alert_id)
             return jsonify({"status": "resolved"})

@@ -71,6 +71,32 @@ class ResponseEngine:
             logger.warning("Access denied killing PID %d", pid)
             return entry
 
+    # Directories that must never be quarantined from
+    PROTECTED_DIRS = frozenset([
+        "/bin", "/sbin", "/usr", "/System", "/Library",
+        "/private/var/db", "/etc",
+    ])
+
+    def _validate_quarantine_path(self, file_path):
+        """Validate file path is safe to quarantine. Returns (resolved_path, error)."""
+        # Resolve to canonical absolute path (resolves symlinks and ..)
+        resolved = os.path.realpath(file_path)
+
+        # Reject symlinks — operate only on the actual file
+        if os.path.islink(file_path):
+            return None, "Refusing to quarantine symlink (resolves to %s)" % resolved
+
+        # Reject paths outside user-accessible directories
+        for protected in self.PROTECTED_DIRS:
+            if resolved.startswith(protected + "/") or resolved == protected:
+                return None, "Path is in protected system directory: %s" % protected
+
+        # Reject if resolved path is a directory
+        if os.path.isdir(resolved):
+            return None, "Path is a directory, not a file"
+
+        return resolved, None
+
     def quarantine_file(self, file_path, reason="Suspicious file"):
         if not os.path.exists(file_path):
             entry = {
@@ -84,8 +110,22 @@ class ResponseEngine:
             self._action_log.append(entry)
             return entry
 
+        resolved_path, validation_error = self._validate_quarantine_path(file_path)
+        if validation_error:
+            entry = {
+                "action": "quarantine_file",
+                "path": file_path,
+                "reason": reason,
+                "timestamp": time.time(),
+                "success": False,
+                "error": validation_error,
+            }
+            self._action_log.append(entry)
+            logger.warning("Quarantine rejected for %s: %s", file_path, validation_error)
+            return entry
+
         try:
-            filename = os.path.basename(file_path)
+            filename = os.path.basename(resolved_path)
             quarantine_name = f"{int(time.time())}_{filename}"
             quarantine_path = os.path.join(self.quarantine_dir, quarantine_name)
 
@@ -99,7 +139,7 @@ class ResponseEngine:
                     "quarantine_path": quarantine_path,
                 }, f, indent=2)
 
-            shutil.move(file_path, quarantine_path)
+            shutil.move(resolved_path, quarantine_path)
 
             entry = {
                 "action": "quarantine_file",
