@@ -1,6 +1,6 @@
 # EDR PoC - Endpoint Detection & Response
 
-A macOS Endpoint Detection and Response proof of concept inspired by CrowdStrike Falcon's architecture. Features a lightweight sensor agent collecting real-time telemetry, an unsupervised ML detection engine, behavioral IOA rules mapped to MITRE ATT&CK, and a real-time web dashboard.
+A macOS Endpoint Detection and Response proof of concept inspired by CrowdStrike Falcon's architecture. Features a lightweight sensor agent collecting real-time telemetry, an unsupervised ML detection engine, behavioral IOA rules mapped to MITRE ATT&CK, and a real-time web dashboard. Small endpoint telemetry pipeline to understand how EDR tools identify malicious behavior rather than signatures.
 
 Built for **educational and security research purposes**.
 
